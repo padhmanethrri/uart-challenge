@@ -1,137 +1,133 @@
 # UART Communication Program
-### RISC-V ACT Framework – Coding Challenge Submission
+### RISC-V ACT Framework Enablement – Coding Challenge Submission
 
 ## Overview
-This program initializes and configures a UART serial interface on Linux using the termios API. It demonstrates hardware-level communication by transmitting a test message and receiving incoming data with a non-blocking timeout mechanism.
+This program opens and configures a UART serial interface on Linux using the termios API. It sends a test message over UART and listens for a response using select() with a non-blocking timeout. Error handling covers common real-world failures like missing devices, permission issues, invalid baud rates, and partial writes.
 
-This is directly relevant to the RISC-V ACT mentorship project, where UART is used as the primary interface for communicating test results from M-mode firmware running on hardware boards such as the VisionFive 2 and Milk-V Jupiter.
-
----
-
-## Features
-- Configures UART parameters: baud rate (9600), data bits (8), parity (none), stop bits (1) — standard 8N1
-- Transmits a test message over the UART interface
-- Receives incoming data using select() with a 5-second timeout (non-blocking I/O)
-- Prints received data to the console
-- Gracefully handles errors: invalid device paths, permission issues, read/write failures
-- Well-commented code explaining every implementation decision
+UART is the primary communication channel in RISC-V hardware validation workflows — used to read ACT test results from M-mode firmware running on boards like the VisionFive 2 and Milk-V Jupiter. This program covers the core Linux serial programming skills needed for that work.
 
 ---
 
-## File Structure
+## Files
 
-uart-challenge/
-├── uart.c       # Main UART program
-├── Makefile     # Build configuration
-└── README.md    # This file
+| File | Description |
+|------|-------------|
+| uart.c | Main UART program |
+| Makefile | Build configuration |
+| test.sh | Automated test suite (6 tests) |
+| RESULTS.md | Test results and program output |
+| README.md | This file |
+
+---
+
+## How the Code Works
+
+The program is split into clean, single-purpose functions:
+
+- open_uart() opens the device file with validation on path length and null checks. Returns specific error messages for common failures like device not found or permission denied
+- get_baud_constant() converts integer baud rate to termios speed_t constant and rejects unsupported values with a helpful message
+- configure_uart() applies 8N1 settings using termios and disables echo, canonical mode, and flow control for raw serial communication
+- uart_send() validates the message before writing and detects partial writes
+- uart_receive() uses select() to wait up to 5 seconds for incoming data without blocking and handles timeout, empty reads, and errors separately
+- main() parses optional device and baud rate arguments, supports --help flag, and runs the full send/receive flow
+
+---
+
+## UART Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| Baud Rate | 9600 (configurable) |
+| Data Bits | 8 |
+| Parity | None |
+| Stop Bits | 1 |
+| Flow Control | None |
+| Read Mode | Non-blocking via select() |
+
+---
+
+## Edge Cases Handled
+
+- NULL or empty device path
+- Device path too long
+- Device not found
+- Permission denied — suggests running with sudo
+- Unsupported baud rate — lists valid options
+- tcgetattr and tcsetattr failures
+- NULL or empty message
+- Message exceeding maximum length
+- Partial write detection
+- select() failure
+- Empty read and remote end closed
+- Read failure
 
 ---
 
 ## Requirements
+
 - Linux or WSL (Windows Subsystem for Linux)
-- GCC compiler
+- GCC
 - Make
+- socat (for testing only)
 
-Install dependencies on Ubuntu/Debian:
+Install everything:
 
-sudo apt update
-sudo apt install gcc make -y
+    sudo apt update
+    sudo apt install gcc make socat -y
 
 ---
 
 ## Build
 
-make
-
-Expected output:
-
-gcc -Wall -Wextra -g -o uart uart.c
+    make
 
 ---
 
 ## Run
 
-sudo ./uart [device]
-
-Default device is /dev/ttyS0. You can specify any UART device:
-
-sudo ./uart /dev/ttyUSB0
-
----
-
-## Testing on WSL (Virtual UART using socat)
-Since WSL does not expose real hardware COM ports, we use socat to create a virtual UART pair for end-to-end testing.
-
-Install socat:
-
-sudo apt install socat -y
-
-Terminal 1 — Create virtual UART pair:
-
-socat -d -d pty,raw,echo=0 pty,raw,echo=0
-
-Note the two device paths printed (e.g. /dev/pts/2 and /dev/pts/3)
-
-Terminal 2 — Listen for incoming data:
-
-cat /dev/pts/3
-
-Terminal 3 — Run the program:
-
-sudo ./uart /dev/pts/2
+    sudo ./uart                          # default /dev/ttyS0 at 9600 baud
+    sudo ./uart /dev/ttyUSB0             # custom device
+    sudo ./uart /dev/ttyUSB0 115200      # custom device and baud rate
+    sudo ./uart --help                   # show usage
 
 ---
 
-## Expected Output
+## Automated Tests
 
-Terminal 3 (program):
+    ./test.sh
 
-Opening UART device: /dev/pts/2
-UART device opened successfully!
-UART configured: 9600 baud | 8N1
-Sent (40 bytes): Hello from UART - RISC-V ACT Challenge!
-Waiting for incoming data (5 sec timeout)...
-Timeout: No data received within 5 seconds.
-UART device closed. Done.
-
-Terminal 2 (receiver):
-
-Hello from UART - RISC-V ACT Challenge!
+See RESULTS.md for full test output.
 
 ---
 
-## UART Configuration Details
+## Manual Testing on WSL
 
-| Parameter    | Value        | Description               |
-|--------------|--------------|---------------------------|
-| Baud Rate    | 9600         | Bits per second           |
-| Data Bits    | 8            | Bits per frame            |
-| Parity       | None         | No parity checking        |
-| Stop Bits    | 1            | Standard 8N1 format       |
-| Flow Control | None         | No hardware/software flow |
-| Read Mode    | Non-blocking | Uses select() with timeout|
+WSL does not expose real hardware COM ports so socat is used to create a virtual UART pair for end to end testing.
 
----
+Terminal 1 — create virtual pair:
 
-## Error Handling
-The program handles the following error cases:
-- Invalid or missing device path
-- Permission denied (suggests running with sudo)
-- tcgetattr / tcsetattr configuration failures
-- Write failures
-- Read failures
-- select() failures
+    socat -d -d pty,raw,echo=0 pty,raw,echo=0
+
+Note the two port names printed (e.g. /dev/pts/2 and /dev/pts/3)
+
+Terminal 2 — listen on one end:
+
+    cat /dev/pts/3
+
+Terminal 3 — run the program:
+
+    sudo ./uart /dev/pts/2
+
+See RESULTS.md for full output from this test.
 
 ---
 
 ## Relevance to RISC-V ACT Mentorship
-In the RISC-V ACT hardware validation workflow, UART serves as the primary communication channel between the host machine and the target board running M-mode firmware. This program demonstrates the foundational Linux serial programming skills needed to:
-- Read test results from the tohost interface via UART
-- Debug trap and boot flow issues on VisionFive 2 / Milk-V Jupiter
-- Automate ACT test execution and log capture
+
+In the RISC-V ACT validation workflow UART is the interface between the host machine and the target board running bare-metal M-mode firmware. Getting this right is a direct prerequisite for reading PASS/FAIL results from the tohost interface, debugging trap and boot flow issues on VisionFive 2 and Milk-V Jupiter, and automating ACT test runs to capture logs for validation reports.
 
 ---
 
 ## Author
 Padhmanethrri
-Submission for RISC-V ACT Framework Enablement Mentorship – 10xEngineers
+Coding challenge submission for RISC-V ACT Framework Enablement Mentorship — 10xEngineers
